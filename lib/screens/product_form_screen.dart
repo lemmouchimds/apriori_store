@@ -1,4 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import '../models/shop_models.dart';
 import '../services/database_helper.dart';
 
@@ -16,7 +20,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   
   late TextEditingController _nameController;
   late TextEditingController _priceController;
-  late TextEditingController _imageController;
+  
+  // Changed: Store the file object instead of a text controller for URL
+  File? _selectedImage;
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
@@ -24,15 +31,43 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     _nameController = TextEditingController(text: widget.product?.name ?? '');
     _priceController = TextEditingController(
         text: widget.product != null ? widget.product!.price.toString() : '');
-    _imageController = TextEditingController(text: widget.product?.imagePath ?? '');
+    
+    // If editing, initialize the file from the existing path
+    if (widget.product?.imagePath != null && widget.product!.imagePath.isNotEmpty) {
+      _selectedImage = File(widget.product!.imagePath);
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _priceController.dispose();
-    _imageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    
+    if (pickedFile != null) {
+      setState(() {
+        _selectedImage = File(pickedFile.path);
+      });
+    }
+  }
+
+  Future<String> _saveImageLocally() async {
+    if (_selectedImage == null) return '';
+    
+    // If the image is already in the app directory (editing existing), return path
+    final appDir = await getApplicationDocumentsDirectory();
+    if (_selectedImage!.path.contains(appDir.path)) {
+      return _selectedImage!.path;
+    }
+
+    // Otherwise, copy the new image to the app's document directory
+    final fileName = path.basename(_selectedImage!.path);
+    final savedImage = await _selectedImage!.copy('${appDir.path}/$fileName');
+    return savedImage.path;
   }
 
   Future<void> _saveProduct() async {
@@ -40,14 +75,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
     final name = _nameController.text;
     final price = double.parse(_priceController.text);
-    final imagePath = _imageController.text;
+    
+    // Save image to local storage and get the permanent path
+    final localPath = await _saveImageLocally();
 
     if (widget.product == null) {
       // Create New
       final newProduct = Product(
         name: name,
         price: price,
-        imagePath: imagePath,
+        imagePath: localPath, // Storing local path now
       );
       await DatabaseHelper.instance.createProduct(newProduct);
     } else {
@@ -56,13 +93,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         id: widget.product!.id,
         name: name,
         price: price,
-        imagePath: imagePath,
+        imagePath: localPath,
       );
       await DatabaseHelper.instance.updateProduct(updatedProduct);
     }
 
     if (!mounted) return;
-    // Return true to indicate a change was made
     Navigator.pop(context, true);
   }
 
@@ -80,6 +116,38 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           key: _formKey,
           child: ListView(
             children: [
+              // Image Picker Area
+              GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  height: 200,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey),
+                  ),
+                  child: _selectedImage != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.file(
+                            _selectedImage!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (c, o, s) => const Icon(Icons.broken_image, size: 50),
+                          ),
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.add_a_photo, size: 50, color: Colors.grey),
+                            SizedBox(height: 10),
+                            Text('Tap to select image', style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
               // Name Input
               TextFormField(
                 controller: _nameController,
@@ -88,12 +156,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.label),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a name';
-                  }
-                  return null;
-                },
+                validator: (value) => (value == null || value.isEmpty) ? 'Please enter a name' : null,
               ),
               const SizedBox(height: 16),
 
@@ -107,26 +170,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   prefixIcon: Icon(Icons.attach_money),
                 ),
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a price';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Please enter a valid number';
-                  }
+                  if (value == null || value.isEmpty) return 'Please enter a price';
+                  if (double.tryParse(value) == null) return 'Please enter a valid number';
                   return null;
                 },
-              ),
-              const SizedBox(height: 16),
-
-              // Image URL Input
-              TextFormField(
-                controller: _imageController,
-                decoration: const InputDecoration(
-                  labelText: 'Image URL (Optional)',
-                  hintText: 'https://example.com/image.png',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.image),
-                ),
               ),
               const SizedBox(height: 24),
 
@@ -136,9 +183,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                 child: ElevatedButton(
                   onPressed: _saveProduct,
                   style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   child: Text(
                     isEditing ? 'Update Product' : 'Add Product',

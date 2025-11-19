@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/shop_models.dart';
@@ -34,7 +35,6 @@ class _ShopScreenState extends State<ShopScreen> {
       appBar: AppBar(
         title: const Text('BasketTech Shop'),
         actions: [
-          // Cart Icon with Badge
           Consumer<CartProvider>(
             builder: (context, cart, child) {
               return Stack(
@@ -58,16 +58,10 @@ class _ShopScreenState extends State<ShopScreen> {
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        constraints: const BoxConstraints(
-                          minWidth: 14,
-                          minHeight: 14,
-                        ),
+                        constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
                         child: Text(
                           '${cart.items.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 8),
                           textAlign: TextAlign.center,
                         ),
                       ),
@@ -112,20 +106,13 @@ class _ShopScreenState extends State<ShopScreen> {
                 child: GridTile(
                   footer: GridTileBar(
                     backgroundColor: Colors.black54,
-                    title: Text(
-                      product.name,
-                      textAlign: TextAlign.center,
-                    ),
+                    title: Text(product.name, textAlign: TextAlign.center),
                     trailing: IconButton(
                       icon: const Icon(Icons.add_shopping_cart),
                       onPressed: () {
-                        Provider.of<CartProvider>(context, listen: false)
-                            .addItem(product);
+                        Provider.of<CartProvider>(context, listen: false).addItem(product);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('${product.name} added to cart!'),
-                            duration: const Duration(seconds: 1),
-                          ),
+                          SnackBar(content: Text('${product.name} added to cart!'), duration: const Duration(seconds: 1)),
                         );
                       },
                     ),
@@ -135,15 +122,12 @@ class _ShopScreenState extends State<ShopScreen> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.3),
-                          blurRadius: 5,
-                          offset: const Offset(0, 3),
-                        ),
+                        BoxShadow(color: Colors.grey.withOpacity(0.3), blurRadius: 5, offset: const Offset(0, 3)),
                       ],
                     ),
-                    child: product.imagePath.startsWith('http')
-                        ? Image.network(product.imagePath, fit: BoxFit.cover)
+                    // CHANGED: Logic to render local file
+                    child: (product.imagePath.isNotEmpty && File(product.imagePath).existsSync())
+                        ? Image.file(File(product.imagePath), fit: BoxFit.cover)
                         : const Icon(Icons.shopping_bag, size: 50, color: Colors.grey),
                   ),
                 ),

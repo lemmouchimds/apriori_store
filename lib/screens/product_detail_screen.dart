@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/shop_models.dart';
@@ -16,13 +17,13 @@ class ProductDetailScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Product Image
+            // 1. Product Image (CHANGED: Local File Logic)
             Container(
               height: 300,
               width: double.infinity,
               color: Colors.grey[200],
-              child: product.imagePath.startsWith('http')
-                  ? Image.network(product.imagePath, fit: BoxFit.cover)
+              child: (product.imagePath.isNotEmpty && File(product.imagePath).existsSync())
+                  ? Image.file(File(product.imagePath), fit: BoxFit.cover)
                   : const Icon(Icons.shopping_bag, size: 100, color: Colors.grey),
             ),
             
@@ -65,9 +66,7 @@ class ProductDetailScreen extends StatelessWidget {
                   
                   const SizedBox(height: 30),
                   
-                  // ---------------------------------------------------------
-                  // PLACEHOLDER FOR STEP 5: Contextual Recommendations
-                  // ---------------------------------------------------------
+                  // Placeholder for Step 5
                   const Divider(),
                   const Text(
                     "Frequently bought together:",

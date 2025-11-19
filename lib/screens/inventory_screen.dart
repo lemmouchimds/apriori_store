@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/shop_models.dart';
 import '../services/database_helper.dart';
@@ -35,9 +36,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     _refreshProducts();
   }
 
-  // ---------------------------------------------------------
-  // ACTIONS FOR APRIORI
-  // ---------------------------------------------------------
   Future<void> _seedData() async {
     await DatabaseHelper.instance.seedDatabase();
     _refreshProducts();
@@ -47,28 +45,20 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _runApriori() async {
-    // Show loading
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-
-    // Run Algo
     await _aprioriService.runApriori();
-
-    // Close loading
     if (!mounted) return;
     Navigator.pop(context);
-
-    // Fetch rules to show count
     final rules = await DatabaseHelper.instance.readAllRules();
-    
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Analysis Complete'),
-        content: Text('Generated ${rules.length} association rules based on current transaction history.\n\nTop Rule: ${rules.isNotEmpty ? "${rules.first.antecedent} -> ${rules.first.consequent}" : "None"}'),
+        content: Text('Generated ${rules.length} association rules.\n\nTop Rule: ${rules.isNotEmpty ? "${rules.first.antecedent} -> ${rules.first.consequent}" : "None"}'),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
       ),
     );
@@ -81,7 +71,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
         builder: (context) => ProductFormScreen(product: product),
       ),
     );
-
     if (result == true) {
       _refreshProducts();
     }
@@ -99,18 +88,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
               if (value == 'seed') _seedData();
               if (value == 'apriori') _runApriori();
             },
-            itemBuilder: (BuildContext context) {
-              return [
-                const PopupMenuItem(
-                  value: 'seed',
-                  child: Text('Seed Dummy Data'),
-                ),
-                const PopupMenuItem(
-                  value: 'apriori',
-                  child: Text('Force Run Apriori'),
-                ),
-              ];
-            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(value: 'seed', child: Text('Seed Dummy Data')),
+              const PopupMenuItem(value: 'apriori', child: Text('Force Run Apriori')),
+            ],
           )
         ],
       ),
@@ -155,15 +136,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         color: Colors.grey[300],
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: product.imagePath.startsWith('http')
-                          ? Image.network(product.imagePath, fit: BoxFit.cover, 
+                      // CHANGED: Logic to render local file
+                      child: (product.imagePath.isNotEmpty && File(product.imagePath).existsSync())
+                          ? Image.file(File(product.imagePath), fit: BoxFit.cover,
                               errorBuilder: (c, o, s) => const Icon(Icons.broken_image))
                           : const Icon(Icons.shopping_bag),
                     ),
-                    title: Text(
-                      product.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
+                    title: Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text('\$${product.price.toStringAsFixed(2)}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,

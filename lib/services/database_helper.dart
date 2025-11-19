@@ -30,6 +30,7 @@ class DatabaseHelper {
 
   Future<void> _createDB(Database db, int version) async {
     // 1. Products Table
+    // Note: image_path stores the local file path string
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,7 +116,6 @@ class DatabaseHelper {
 
   Future<int> deleteProduct(int id) async {
     final db = await instance.database;
-    // Note: Soft delete is preferred in production, but strict delete requested in scope
     return await db.delete(
       'products',
       where: 'id = ?',
@@ -127,19 +127,15 @@ class DatabaseHelper {
   // Transaction Methods
   // ---------------------------------------------------------------------------
 
-  /// Inserts a transaction header and all its associated items atomically.
   Future<int> createFullTransaction(List<Product> cartItems, double total) async {
     final db = await instance.database;
     
-    // Use a Transaction block to ensure data integrity
     return await db.transaction((txn) async {
-      // 1. Insert the Transaction Header
       final transactionId = await txn.insert('transactions', {
         'timestamp': DateTime.now().millisecondsSinceEpoch,
         'total_amount': total,
       });
 
-      // 2. Insert each Item in the Cart linked to this Transaction ID
       for (var product in cartItems) {
         await txn.insert('transaction_items', {
           'transaction_id': transactionId,
@@ -161,8 +157,6 @@ class DatabaseHelper {
   // Apriori Data Fetching Methods
   // ---------------------------------------------------------------------------
 
-  /// Fetches all transaction items to be fed into the Apriori Algorithm.
-  /// Returns a Map where Key = transactionId and Value = List of productIds.
   Future<Map<int, List<int>>> getAllTransactionSets() async {
     final db = await instance.database;
     final result = await db.query('transaction_items');
@@ -189,9 +183,7 @@ class DatabaseHelper {
   Future<void> saveAssociationRules(List<AssociationRule> rules) async {
     final db = await instance.database;
     await db.transaction((txn) async {
-      // Clear old rules first - we only want the latest analysis
       await txn.delete('association_rules');
-      
       for (var rule in rules) {
         await txn.insert('association_rules', rule.toMap());
       }
@@ -205,17 +197,17 @@ class DatabaseHelper {
   }
 
   // ---------------------------------------------------------------------------
-  // SEEDING HELPERS (For Demo Purposes)
+  // SEEDING HELPERS
   // ---------------------------------------------------------------------------
   
   Future<void> seedDatabase() async {
     final db = await instance.database;
     
-    // 1. Check if products exist, if so, don't overwrite
     var count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM products'));
     if (count != null && count > 0) return; 
 
-    // 2. Add Products
+    // Note: imagePath is empty because we can't easily seed local files.
+    // The UI handles empty paths by showing a default icon.
     List<Product> demoProducts = [
       Product(name: 'Bread', price: 2.50, imagePath: ''), // ID 1
       Product(name: 'Milk', price: 3.00, imagePath: ''),  // ID 2
@@ -229,32 +221,20 @@ class DatabaseHelper {
       await createProduct(p);
     }
 
-    // 3. Generate 20 Dummy Transactions to create patterns
-    // Pattern 1: Bread & Milk often go together
-    // Pattern 2: Diapers & Beer often go together
-    
     Random rng = Random();
     
     for (int i = 0; i < 30; i++) {
       List<Product> cart = [];
-      
-      // 50% chance to buy Bread
       if (rng.nextBool()) {
-        cart.add(demoProducts[0]); // Bread
-        // 80% chance to buy Milk if buying Bread
-        if (rng.nextDouble() > 0.2) cart.add(demoProducts[1]); // Milk
+        cart.add(demoProducts[0]);
+        if (rng.nextDouble() > 0.2) cart.add(demoProducts[1]);
       }
-
-      // 30% chance to buy Diapers
       if (rng.nextDouble() > 0.7) {
-        cart.add(demoProducts[2]); // Diapers
-        // 90% chance to buy Beer if buying Diapers (Classic Apriori example)
-        if (rng.nextDouble() > 0.1) cart.add(demoProducts[3]); // Beer
+        cart.add(demoProducts[2]);
+        if (rng.nextDouble() > 0.1) cart.add(demoProducts[3]);
       }
-
-      // Random noise (Eggs or Cola)
-      if (rng.nextBool()) cart.add(demoProducts[4]); // Eggs
-      if (rng.nextBool()) cart.add(demoProducts[5]); // Cola
+      if (rng.nextBool()) cart.add(demoProducts[4]);
+      if (rng.nextBool()) cart.add(demoProducts[5]);
       
       if (cart.isNotEmpty) {
         await createFullTransaction(
