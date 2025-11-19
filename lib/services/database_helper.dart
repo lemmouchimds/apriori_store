@@ -30,7 +30,6 @@ class DatabaseHelper {
 
   Future<void> _createDB(Database db, int version) async {
     // 1. Products Table
-    // Note: image_path stores the local file path string
     await db.execute('''
       CREATE TABLE products (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,6 +196,74 @@ class DatabaseHelper {
   }
 
   // ---------------------------------------------------------------------------
+  // RECOMMENDATION LOGIC (STEP 5 IMPLEMENTATION)
+  // ---------------------------------------------------------------------------
+
+  /// Scenario A: Product Page
+  /// Returns products that appear in the 'Consequent' of rules where
+  /// the 'Antecedent' contains this [productId].
+  Future<List<Product>> getRelatedProducts(int productId) async {
+    // 1. Get all rules (In a real large app, you'd optimize this query)
+    final rules = await readAllRules();
+    
+    // 2. Filter: Find rules where 'productId' is in the antecedent
+    final relevantRules = rules.where((r) => r.antecedent.contains(productId)).toList();
+    
+    if (relevantRules.isEmpty) return [];
+
+    // 3. Collect Consequent IDs (Take top 3 strongest rules)
+    Set<int> recommendedIds = {};
+    for (var rule in relevantRules.take(3)) {
+      recommendedIds.addAll(rule.consequent);
+    }
+
+    if (recommendedIds.isEmpty) return [];
+    
+    // 4. Fetch actual Product objects
+    final db = await instance.database;
+    final idList = recommendedIds.join(',');
+    final result = await db.rawQuery('SELECT * FROM products WHERE id IN ($idList)');
+    
+    return result.map((json) => Product.fromMap(json)).toList();
+  }
+
+  /// Scenario B: Checkout Page
+  /// Returns products that pattern-match the current cart contents.
+  Future<List<Product>> getCartRecommendations(List<int> cartItemIds) async {
+    if (cartItemIds.isEmpty) return [];
+
+    final rules = await readAllRules();
+    Set<int> recommendedIds = {};
+
+    // Strategy: Find any rule where the antecedent is a subset of the cart
+    // e.g. Rule: [Milk] -> [Bread]. Cart has: [Milk, Diapers]. Match!
+    
+    for (var rule in rules) {
+      // Check if rule.antecedent is fully present in cartItemIds
+      bool isMatch = rule.antecedent.every((id) => cartItemIds.contains(id));
+      
+      if (isMatch) {
+        // Add consequents that are NOT already in the cart
+        for (var conId in rule.consequent) {
+          if (!cartItemIds.contains(conId)) {
+            recommendedIds.add(conId);
+          }
+        }
+      }
+      // Limit to 5 distinct recommendations to avoid clutter
+      if (recommendedIds.length >= 5) break; 
+    }
+
+    if (recommendedIds.isEmpty) return [];
+
+    final db = await instance.database;
+    final idList = recommendedIds.join(',');
+    final result = await db.rawQuery('SELECT * FROM products WHERE id IN ($idList)');
+    
+    return result.map((json) => Product.fromMap(json)).toList();
+  }
+
+  // ---------------------------------------------------------------------------
   // SEEDING HELPERS
   // ---------------------------------------------------------------------------
   
@@ -206,15 +273,11 @@ class DatabaseHelper {
     var count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM products'));
     if (count != null && count > 0) return; 
 
-    // Note: imagePath is empty because we can't easily seed local files.
-    // The UI handles empty paths by showing a default icon.
     List<Product> demoProducts = [
-      Product(name: 'Bread', price: 2.50, imagePath: ''), // ID 1
-      Product(name: 'Milk', price: 3.00, imagePath: ''),  // ID 2
-      Product(name: 'Diapers', price: 15.00, imagePath: ''), // ID 3
-      Product(name: 'Beer', price: 8.00, imagePath: ''), // ID 4
-      Product(name: 'Eggs', price: 4.00, imagePath: ''), // ID 5
-      Product(name: 'Cola', price: 1.50, imagePath: ''), // ID 6
+      Product(name: 'Bread', price: 2.50, imagePath: ''), 
+      Product(name: 'Milk', price: 3.00, imagePath: ''),  
+      Product(name: 'Eggs', price: 4.00, imagePath: ''), 
+      Product(name: 'Hamoud', price: 1.50, imagePath: ''), 
     ];
 
     for (var p in demoProducts) {
