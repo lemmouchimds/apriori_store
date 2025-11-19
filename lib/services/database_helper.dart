@@ -1,3 +1,5 @@
+import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/shop_models.dart';
@@ -200,5 +202,67 @@ class DatabaseHelper {
     final db = await instance.database;
     final result = await db.query('association_rules', orderBy: 'confidence DESC');
     return result.map((json) => AssociationRule.fromMap(json)).toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // SEEDING HELPERS (For Demo Purposes)
+  // ---------------------------------------------------------------------------
+  
+  Future<void> seedDatabase() async {
+    final db = await instance.database;
+    
+    // 1. Check if products exist, if so, don't overwrite
+    var count = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM products'));
+    if (count != null && count > 0) return; 
+
+    // 2. Add Products
+    List<Product> demoProducts = [
+      Product(name: 'Bread', price: 2.50, imagePath: ''), // ID 1
+      Product(name: 'Milk', price: 3.00, imagePath: ''),  // ID 2
+      Product(name: 'Diapers', price: 15.00, imagePath: ''), // ID 3
+      Product(name: 'Beer', price: 8.00, imagePath: ''), // ID 4
+      Product(name: 'Eggs', price: 4.00, imagePath: ''), // ID 5
+      Product(name: 'Cola', price: 1.50, imagePath: ''), // ID 6
+    ];
+
+    for (var p in demoProducts) {
+      await createProduct(p);
+    }
+
+    // 3. Generate 20 Dummy Transactions to create patterns
+    // Pattern 1: Bread & Milk often go together
+    // Pattern 2: Diapers & Beer often go together
+    
+    Random rng = Random();
+    
+    for (int i = 0; i < 30; i++) {
+      List<Product> cart = [];
+      
+      // 50% chance to buy Bread
+      if (rng.nextBool()) {
+        cart.add(demoProducts[0]); // Bread
+        // 80% chance to buy Milk if buying Bread
+        if (rng.nextDouble() > 0.2) cart.add(demoProducts[1]); // Milk
+      }
+
+      // 30% chance to buy Diapers
+      if (rng.nextDouble() > 0.7) {
+        cart.add(demoProducts[2]); // Diapers
+        // 90% chance to buy Beer if buying Diapers (Classic Apriori example)
+        if (rng.nextDouble() > 0.1) cart.add(demoProducts[3]); // Beer
+      }
+
+      // Random noise (Eggs or Cola)
+      if (rng.nextBool()) cart.add(demoProducts[4]); // Eggs
+      if (rng.nextBool()) cart.add(demoProducts[5]); // Cola
+      
+      if (cart.isNotEmpty) {
+        await createFullTransaction(
+          cart, 
+          cart.fold(0, (sum, item) => sum + item.price)
+        );
+      }
+    }
+    debugPrint("Database Seeded with 30 transactions.");
   }
 }

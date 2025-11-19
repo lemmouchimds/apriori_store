@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/shop_models.dart';
 import '../services/database_helper.dart';
+import '../services/apriori_service.dart';
 import 'product_form_screen.dart';
 
 class InventoryScreen extends StatefulWidget {
@@ -12,6 +13,7 @@ class InventoryScreen extends StatefulWidget {
 
 class _InventoryScreenState extends State<InventoryScreen> {
   late Future<List<Product>> _productsFuture;
+  final AprioriService _aprioriService = AprioriService();
 
   @override
   void initState() {
@@ -33,8 +35,46 @@ class _InventoryScreenState extends State<InventoryScreen> {
     _refreshProducts();
   }
 
+  // ---------------------------------------------------------
+  // ACTIONS FOR APRIORI
+  // ---------------------------------------------------------
+  Future<void> _seedData() async {
+    await DatabaseHelper.instance.seedDatabase();
+    _refreshProducts();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Database Seeded! Transactions Created.')),
+    );
+  }
+
+  Future<void> _runApriori() async {
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Run Algo
+    await _aprioriService.runApriori();
+
+    // Close loading
+    if (!mounted) return;
+    Navigator.pop(context);
+
+    // Fetch rules to show count
+    final rules = await DatabaseHelper.instance.readAllRules();
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Analysis Complete'),
+        content: Text('Generated ${rules.length} association rules based on current transaction history.\n\nTop Rule: ${rules.isNotEmpty ? "${rules.first.antecedent} -> ${rules.first.consequent}" : "None"}'),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+      ),
+    );
+  }
+
   void _navigateToForm({Product? product}) async {
-    // Wait for the form screen to pop. If it returns true, refresh the list.
     final result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -53,6 +93,26 @@ class _InventoryScreenState extends State<InventoryScreen> {
       appBar: AppBar(
         title: const Text('Inventory Management'),
         centerTitle: true,
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'seed') _seedData();
+              if (value == 'apriori') _runApriori();
+            },
+            itemBuilder: (BuildContext context) {
+              return [
+                const PopupMenuItem(
+                  value: 'seed',
+                  child: Text('Seed Dummy Data'),
+                ),
+                const PopupMenuItem(
+                  value: 'apriori',
+                  child: Text('Force Run Apriori'),
+                ),
+              ];
+            },
+          )
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _navigateToForm(),
@@ -68,7 +128,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return const Center(
               child: Text(
-                'No products found.\nAdd some items to start!',
+                'No products found.\nUse the top-right menu to SEED DATA.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 16, color: Colors.grey),
               ),
@@ -95,7 +155,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         color: Colors.grey[300],
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      // Logic to show image or icon fallback
                       child: product.imagePath.startsWith('http')
                           ? Image.network(product.imagePath, fit: BoxFit.cover, 
                               errorBuilder: (c, o, s) => const Icon(Icons.broken_image))
@@ -115,26 +174,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Delete Product'),
-                              content: Text('Are you sure you want to delete ${product.name}?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: const Text('Cancel'),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(ctx);
-                                    _deleteProduct(product.id!);
-                                  },
-                                  child: const Text('Delete', style: TextStyle(color: Colors.red)),
-                                ),
-                              ],
-                            ),
-                          ),
+                          onPressed: () => _deleteProduct(product.id!),
                         ),
                       ],
                     ),
