@@ -53,7 +53,7 @@ The app tracks user transactions and analyzes them to find frequent item sets. T
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/apriori_store.git
+   git clone https://github.com/lemmouchimds/apriori_store.git
    cd apriori_store
    ```
 
