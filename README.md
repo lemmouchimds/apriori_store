@@ -38,7 +38,7 @@ The app tracks user transactions and analyzes them to find frequent item sets. T
 
 | Shop Screen | Product Details | Cart & Checkout |
 |:-----------:|:---------------:|:---------------:|
-| ![Shop Screen](docs/screenshots/shop.png) | ![Product Details](docs/screenshots/details.png) | ![Cart](docs/screenshots/cart.png) |
+| ![Shop Screen](docs/screenshots/shop.jpg) | ![Product Details](docs/screenshots/details.jpg) | ![Cart](docs/screenshots/cart.jpg) |
 | *Browse Products* | *See Recommendations* | *Smart Suggestions* |
 
 *(Note: Please add screenshots to a `docs/screenshots` folder)*
